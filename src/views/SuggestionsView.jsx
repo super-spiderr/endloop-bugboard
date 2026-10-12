@@ -66,6 +66,7 @@ function SuggRow({ s, onOpen }) {
           {s.roaster && <span><Icon name="mask" />{lbl(ROASTER, s.roaster)}</span>}
           {s.roastId && <span><Icon name="flame" />for {s.roastId}</span>}
           {s.suggestedBy && <span><Icon name="user" />{s.suggestedBy}</span>}
+          {s.files > 0 && <span title="Screenshots"><Icon name="clip" />{s.files}</span>}
         </div>
       </div>
       <span className="age">{ago(s.createdAt)}</span>

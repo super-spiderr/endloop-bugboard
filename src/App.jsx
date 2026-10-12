@@ -11,6 +11,8 @@ import Dashboard from "./views/Dashboard";
 import BugsView from "./views/BugsView";
 import SuggestionsView from "./views/SuggestionsView";
 import RoastsView from "./views/RoastsView";
+import RoastAdminView from "./views/RoastAdminView";
+import { download, groupSlots, slotsToCsv } from "./lib/roastlib";
 
 const TABS = [
   ["dash", "Dashboard", "chart"],
@@ -18,7 +20,8 @@ const TABS = [
   ["sugg", "Suggestions", "bulb"],
   ["roast", "Roasts", "flame"],
 ];
-const HASH_TAB = { "#dashboard": "dash", "#bugs": "bugs", "#suggestions": "sugg", "#roasts": "roast" };
+const ADMIN_TAB = ["admin", "Roast admin", "sliders"];
+const HASH_TAB = { "#dashboard": "dash", "#bugs": "bugs", "#suggestions": "sugg", "#roasts": "roast", "#roast-admin": "admin" };
 
 const BUG_COLS = [
   ["ID", (b) => bid(b.num)], ["Title", (b) => b.title], ["Screen", (b) => screenLbl(b.screen)], ["Severity", (b) => lbl(SEV, b.severity)],
@@ -62,6 +65,8 @@ export default function App() {
   const api = useMemo(() => makeApi(code), [code]);
   const isAdmin = role === "admin";
   const sheetOpen = useRef(false);
+  const adminSheetOpen = useRef(false);
+  const [newSlot, setNewSlot] = useState(0);
   sheetOpen.current = Boolean(sheet);
 
   const lock = useCallback((msg = "") => {
@@ -95,7 +100,7 @@ export default function App() {
   useEffect(() => {
     if (!code || !isConfigured) return;
     refresh();
-    const tick = () => !document.hidden && !sheetOpen.current && refresh();
+    const tick = () => !document.hidden && !sheetOpen.current && !adminSheetOpen.current && refresh();
     const id = setInterval(tick, 30000);
     document.addEventListener("visibilitychange", tick);
     return () => {
@@ -103,6 +108,11 @@ export default function App() {
       document.removeEventListener("visibilitychange", tick);
     };
   }, [code, refresh]);
+
+  // The admin tab is admin-only; send testers who land on it to the Roasts tab.
+  useEffect(() => {
+    if (role && role !== "admin" && tab === "admin") setTab("roast");
+  }, [role, tab, setTab]);
 
   useEffect(() => {
     if (!toast) return;
@@ -135,17 +145,29 @@ export default function App() {
     setSheet({ type, id, prefill, key: Date.now() });
   }
 
-  async function save(type, item, payload) {
+  async function save(type, item, payload, pending = []) {
+    let failMsg = "";
     try {
       if (type === "roast") {
         await api.saveRoast(payload.id, payload.data);
         setToast(`${item ? "Saved" : "Added"} ${payload.id}`);
       } else {
         const saved = await api.save(type, item ? item.id : null, payload.data);
-        setToast(`${item ? "Saved" : "Added"} ${codeOf(type, saved || item)}`);
+        const label = codeOf(type, saved || item);
+        let failed = 0;
+        for (const f of pending) {
+          try {
+            await api.attach(type, saved.id, f.name, f.data, myName);
+          } catch {
+            failed++;
+          }
+        }
+        if (failed) failMsg = `Added ${label}, but ${failed} of ${pending.length} images didn't upload. Open it and add them again.`;
+        setToast(`${item ? "Saved" : "Added"} ${label}${pending.length - failed ? ` with ${pending.length - failed} image${pending.length - failed === 1 ? "" : "s"}` : ""}`);
       }
       setSheet(null);
-      refresh();
+      await refresh();
+      if (failMsg) setNotice(failMsg);
       return true;
     } catch (err) {
       handleErr(err);
@@ -165,6 +187,12 @@ export default function App() {
   }
 
   function exportCsv() {
+    if (tab === "admin") {
+      const slots = groupSlots(data.roasts);
+      if (!slots.length) return setToast("No roast slots to export yet");
+      download(`endloop-roasts-${today()}.csv`, slotsToCsv(slots), "text/csv");
+      return setToast(`Exported ${slots.length} roast slots`);
+    }
     const [rows, cols, what, key] =
       tab === "sugg" ? [data.suggestions, SUGG_COLS, "suggestions"]
       : tab === "roast" ? [data.roasts, ROAST_COLS, "roasts", (r) => r.lang + r.id]
@@ -186,9 +214,11 @@ export default function App() {
     sugg: data.suggestions.filter((s) => sActive(s.status)).length,
     roast: data.roasts.filter((r) => ["change", "remove", "new"].includes(r.review)).length,
   };
-  const newLabel = { sugg: "Add suggestion", roast: isAdmin ? "Add roast line" : "Suggest a roast line" }[tab] || "Report a bug";
-  const exportLabel = `Export ${{ sugg: "suggestions", roast: "roasts" }[tab] || "bugs"}`;
-  const newItem = () => openSheet(tab === "sugg" ? "sugg" : tab === "roast" ? "roast" : "bug");
+  const onAdmin = tab === "admin" && isAdmin;
+  const newLabel = onAdmin ? "New roast slot" : { sugg: "Add suggestion", roast: isAdmin ? "Add roast line" : "Suggest a roast line" }[tab] || "Report a bug";
+  const exportLabel = `Export ${{ sugg: "suggestions", roast: "roasts", admin: "roast slots" }[tab] || "bugs"}`;
+  const newItem = () => (onAdmin ? setNewSlot(Date.now()) : openSheet(tab === "sugg" ? "sugg" : tab === "roast" ? "roast" : "bug"));
+  const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS;
 
   return (
     <>
@@ -212,7 +242,7 @@ export default function App() {
         {notice && <div className="notice" role="status">{notice}</div>}
 
         <div className="tabs" role="tablist" aria-label="View">
-          {TABS.map(([k, label, icon]) => (
+          {tabs.map(([k, label, icon]) => (
             <button key={k} className="tab" role="tab" id={`tab-${k}`} type="button" aria-selected={tab === k} onClick={() => setTab(k)}>
               <Icon name={icon} />
               <span className="tl">{label}</span>
@@ -227,6 +257,12 @@ export default function App() {
         {tab === "bugs" && <BugsView bugs={data.bugs} loaded={loaded} onOpen={openSheet} />}
         {tab === "sugg" && <SuggestionsView suggs={data.suggestions} loaded={loaded} onOpen={openSheet} />}
         {tab === "roast" && <RoastsView roasts={data.roasts} loaded={loaded} onOpen={openSheet} />}
+        {tab === "admin" && (isAdmin ? (
+          <RoastAdminView rows={data.roasts} loaded={loaded} api={api} myName={myName} refresh={refresh}
+            setToast={setToast} onError={handleErr} sheetOpenRef={adminSheetOpen} newSlotSignal={newSlot} />
+        ) : role ? (
+          <div className="notice">Roast admin needs the admin passcode.</div>
+        ) : null)}
       </div>
 
       <button className="btn primary fab" id="fab" type="button" onClick={newItem}>
@@ -238,6 +274,8 @@ export default function App() {
           key={sheet.key}
           sheet={sheet}
           item={sheetItem}
+          api={api}
+          onFilesChanged={refresh}
           isAdmin={isAdmin}
           myName={myName}
           suggs={data.suggestions}

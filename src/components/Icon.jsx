@@ -1,4 +1,16 @@
 const PATHS = {
+  check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  upload: <path d="M12 20V9m0 0-4 4m4-4 4 4M5 4h14" />,
+  send: <path d="M4 12 20 4l-6 16-3-7-7-1Z" />,
+  trash: <path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" />,
+  sliders: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 5v4M8 15v4" />,
+  history: (
+    <>
+      <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5" />
+      <path d="M3.5 4v4.5H8M12 7.5V12l3 2" />
+    </>
+  ),
+  edit: <path d="M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4" />,
   plus: <path d="M12 5v14M5 12h14" />,
   download: <path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />,
   search: (
@@ -42,6 +54,7 @@ const PATHS = {
     </>
   ),
   flame: <path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.4 1.2-3.8 2.4-5 .3 1.6 1 2.6 2.1 3 0-3 .5-5.6.5-8Z" />,
+  clip: <path d="m20 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />,
   lock: (
     <>
       <rect x="5" y="10.5" width="14" height="10" rx="2.5" />

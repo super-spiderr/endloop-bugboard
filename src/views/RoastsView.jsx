@@ -85,6 +85,7 @@ function RoastRow({ r, showLang, onOpen }) {
           {r.kinds && r.kinds.length > 0 && <span><Icon name="phone" />{r.kinds.join(", ")}</span>}
           {showLang && <span>{lbl(LANGS, r.lang)}</span>}
           {r.notes && <span><Icon name="user" />has notes</span>}
+          {r.status && r.status !== "live" && <span>{r.status === "draft" ? "Draft, not in the app yet" : "Off, not in the app"}</span>}
         </div>
       </div>
       <span className="age" />

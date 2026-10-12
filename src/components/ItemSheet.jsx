@@ -4,6 +4,7 @@ import {
   REVIEW, ROASTER, SCREENS, SEV, SSTATUS, STATUS,
 } from "../lib/constants";
 import { catLbl, codeOf, fmtDate, fmtDateTime, isOpen, lbl, reviewOf, sActive, screenLbl, sid, strip } from "../lib/format";
+import Attachments from "./Attachments";
 import Icon from "./Icon";
 import { Line, Select } from "./bits";
 
@@ -91,7 +92,7 @@ export function buildPayload(type, item, v, roasts) {
 
 /* ---------- small field helpers ---------- */
 
-const Field = ({ label, hint, full, hidden, children }) =>
+export const Field = ({ label, hint, full, hidden, children }) =>
   hidden ? null : (
     <label className={full ? "full" : undefined}>
       <span>
@@ -101,7 +102,7 @@ const Field = ({ label, hint, full, hidden, children }) =>
     </label>
   );
 
-function Seg({ name, value, options, onChange, label }) {
+export function Seg({ name, value, options, onChange, label }) {
   return (
     <div className="seg" role="radiogroup" aria-label={label}>
       {options.map(([v, l]) => (
@@ -129,7 +130,7 @@ function Stamps({ item }) {
 }
 
 /** Roast-line textarea with placeholder buttons and warnings. */
-function RoastLineInput({ id, value, onChange, category, placeholder }) {
+export function RoastLineInput({ id, value, onChange, category, placeholder }) {
   const ref = useRef(null);
   const insert = (p) => {
     const ta = ref.current;
@@ -323,12 +324,13 @@ function RoastReadOnly({ item, suggs }) {
 
 /* ---------- the sheet ---------- */
 
-export default function ItemSheet({ sheet, item, isAdmin, myName, suggs, roasts, onClose, onSave, onDelete, onSuggestChange }) {
+export default function ItemSheet({ sheet, item, api, isAdmin, myName, suggs, roasts, onClose, onSave, onDelete, onSuggestChange, onFilesChanged }) {
   const { type, prefill } = sheet;
   const [v, setV] = useState(() => initialValues(type, item, prefill, myName, isAdmin));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [pending, setPending] = useState([]);
   const set = (k, x) => setV((o) => ({ ...o, [k]: x }));
   const formRef = useRef(null);
 
@@ -375,7 +377,7 @@ export default function ItemSheet({ sheet, item, isAdmin, myName, suggs, roasts,
     if (type === "sugg" && !item && prefill && prefill.roastId && p.data.kind === "roast") p.data.roastId = prefill.roastId;
     setBusy(true);
     setError("");
-    const ok = await onSave(type, item, p);
+    const ok = await onSave(type, item, p, pending);
     if (!ok) setBusy(false);
   }
 
@@ -437,6 +439,10 @@ export default function ItemSheet({ sheet, item, isAdmin, myName, suggs, roasts,
         <div className="sheet-bd">
           {error && <div className="form-err" role="alert">{error}</div>}
           <fieldset className="bare" disabled={readOnly}>{body}</fieldset>
+          {type !== "roast" && (
+            <Attachments api={api} type={type} item={item} isAdmin={isAdmin} myName={myName}
+              pending={pending} setPending={setPending} onChanged={onFilesChanged} />
+          )}
         </div>
         <div className="sheet-ft">{footer}</div>
       </form>

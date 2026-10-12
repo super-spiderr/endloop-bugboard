@@ -64,6 +64,7 @@ function BugRow({ b, onOpen }) {
           {b.roaster && <span><Icon name="mask" />{lbl(ROASTER, b.roaster)}</span>}
           {b.device && <span><Icon name="phone" />{b.device}</span>}
           {b.reporter && <span><Icon name="user" />{b.reporter}</span>}
+          {b.files > 0 && <span title="Screenshots"><Icon name="clip" />{b.files}</span>}
         </div>
       </div>
       <span className="age">{ago(b.createdAt)}</span>

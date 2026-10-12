@@ -38,6 +38,7 @@ export const strip = (o) => {
   const c = { ...o };
   delete c.id;
   delete c.num;
+  delete c.files;
   return c;
 };
 
