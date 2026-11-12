@@ -123,6 +123,12 @@ at least two lines), shows exactly what changes for the app, then saves a new nu
 makes it live. **Versions** lets you switch back to any earlier one. **Download app files** gives the
 `core.*.json` and `manifest.json` to bundle inside the app (`src/roasts/`).
 
+**Message for users** (optional, per language, up to 140 characters, no `{placeholders}`): shown
+once on the app's Today screen after phones download that version, e.g. "Diwali specials are in.
+Brace yourself." Users on a language without a message get the English one. It isn't repeated when
+you switch back to an older version, and it isn't shown if a phone downloads the version more than
+10 days after you published it. Existing databases: run `supabase/roast-admin.sql` again to add it.
+
 ### What the app reads
 
 Two public functions, no passcode, only ever the live version:
@@ -132,7 +138,7 @@ GET {VITE_SUPABASE_URL}/rest/v1/rpc/roast_manifest            header apikey: <pu
 GET {VITE_SUPABASE_URL}/rest/v1/rpc/roast_pack?p_lang=ta-Latn  header apikey: <publishable key>
 ```
 
-The manifest has the live version and a checksum per language. The app should keep its bundled
-pack, check the manifest at most every 12 hours, and download a pack only when its checksum changes.
-Lines with `from` / `to` dates only show between those dates. When the app starts doing this,
-update the privacy policy (the phone will contact the Supabase server).
+The manifest has the live version, a checksum per language and the message for users (`announce`).
+The app keeps its bundled pack, checks the manifest at most every 6 hours, and downloads a pack only when its checksum changes.
+Lines with `from` / `to` dates only show between those dates. The privacy policy covers these
+downloads ("Roast updates").

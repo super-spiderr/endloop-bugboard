@@ -477,11 +477,14 @@ function ImportPanel({ slots, saveRows, setToast }) {
 
 /* ================= Publish ================= */
 
+const ANN_MAX = 140;
+
 function PublishPanel({ rows, slots, api, myName, setToast, onError }) {
   const [rel, setRel] = useState(null); // { live, releases }
   const [livePacks, setLivePacks] = useState(null);
   const [setup, setSetup] = useState(false);
   const [notes, setNotes] = useState("");
+  const [ann, setAnn] = useState({ en: "", "ta-Latn": "" });
   const [anyway, setAnyway] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showCov, setShowCov] = useState(false);
@@ -513,14 +516,18 @@ function PublishPanel({ rows, slots, api, myName, setToast, onError }) {
   }, [slots]);
   const diff = useMemo(() => (livePacks ? diffPacks(packs, livePacks) : null), [packs, livePacks]);
   const changes = diff ? Object.values(diff).reduce((n, d) => n + d.added.length + d.changed.length + d.removed.length, 0) : 0;
-  const blocked = lineErrors.length > 0 || (cov.errors.length > 0 && !anyway) || !packs.en;
+  const annProblems = LANG_CODES.filter((l) => { const t = (ann[l] || "").trim(); return t.length > ANN_MAX || /[{}]/.test(t); });
+  const annMissing = LANG_CODES.some((l) => (ann[l] || "").trim()) && LANG_CODES.some((l) => !(ann[l] || "").trim());
+  const blocked = annProblems.length > 0 || lineErrors.length > 0 || (cov.errors.length > 0 && !anyway) || !packs.en;
 
   async function publish() {
     setBusy(true);
     try {
-      const r = await api.publish(packs, notes.trim(), myName);
+      const announce = Object.fromEntries(LANG_CODES.map((l) => [l, (ann[l] || "").trim()]).filter(([, t]) => t));
+      const r = await api.publish(packs, notes.trim(), myName, announce);
       setToast(`Published version ${r.version}. The app picks it up on its next check.`);
       setNotes("");
+      setAnn({ en: "", "ta-Latn": "" });
       await load();
     } catch (err) {
       onError(err);
@@ -620,6 +627,23 @@ function PublishPanel({ rows, slots, api, myName, setToast, onError }) {
         <label className="form one"><span className="lbl2">What changed <span className="hint">for your own history</span></span>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Diwali lines, 12 Tanglish fixes from testers" maxLength={500} />
         </label>
+        <div className="annbox">
+          <span className="lbl2">Message for users <span className="hint">optional · shown once on the Today screen when the new lines arrive · up to {ANN_MAX} characters, no {"{placeholders}"}</span></span>
+          {LANG_CODES.map((l) => {
+            const t = ann[l] || "";
+            const bad = annProblems.includes(l);
+            return (
+              <label key={l} className={`annrow${bad ? " bad" : ""}`}>
+                <span className="annlang">{l === "en" ? "English" : "Tanglish"}</span>
+                <input type="text" value={t} onChange={(e) => setAnn({ ...ann, [l]: e.target.value })} maxLength={ANN_MAX + 20}
+                  placeholder={l === "en" ? "e.g. Diwali specials are in. Brace yourself." : "e.g. Diwali special roasts vandhachu. Ready-ah iru."} />
+                <span className="anncount">{t.trim().length}/{ANN_MAX}</span>
+              </label>
+            );
+          })}
+          {annProblems.length > 0 && <div className="issue err">Keep each message under {ANN_MAX} characters, without {"{ }"}.</div>}
+          {annMissing && !annProblems.length && <div className="issue">Only one language has a message. Users on the other language get the English one, or nothing if English is empty.</div>}
+        </div>
         {cov.errors.length > 0 && !lineErrors.length && (
           <label className="checkline"><input type="checkbox" checked={anyway} onChange={(e) => setAnyway(e.target.checked)} /><span>Publish anyway (users in the gaps get English or a milder level)</span></label>
         )}
@@ -641,6 +665,9 @@ function PublishPanel({ rows, slots, api, myName, setToast, onError }) {
                 <b>v{r.version}</b>
                 <div className="t">
                   <div>{r.notes || <span className="muted">No notes</span>}</div>
+                  {r.announce && Object.keys(r.announce).length > 0 && (
+                    <div className="annshown">{Object.entries(r.announce).map(([l, t]) => <span key={l}><b>{LANG_SHORT[l] || l}</b> “{t}”</span>)}</div>
+                  )}
                   <div className="meta"><span>{fmtDateTime(r.createdAt)}</span>{r.createdBy && <span>by {r.createdBy}</span>}
                     {Object.entries(r.counts || {}).map(([l, c]) => <span key={l}>{LANG_SHORT[l] || l} {c}</span>)}</div>
                 </div>

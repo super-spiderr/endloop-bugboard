@@ -6,7 +6,7 @@
 --   * board_publish_roasts admin: store a new published version of the roast packs and make it live.
 --   * board_releases      tester or admin: list published versions (no line text).
 --   * board_set_live      admin: make an older version live again (rollback) or a newer one.
---   * roast_manifest()    PUBLIC, no passcode: which version is live, with a checksum per language.
+--   * roast_manifest()    PUBLIC, no passcode: which version is live, a checksum per language and its announcement.
 --   * roast_pack(lang)    PUBLIC, no passcode: the live pack for one language, for the app to download.
 --
 -- Only published versions are public. Drafts, review notes and tester names never leave the board.
@@ -20,6 +20,7 @@ create table if not exists public.roast_releases (
   sha256      jsonb not null default '{}'::jsonb,
   notes       text not null default '',
   created_by  text not null default '',
+  announce    jsonb not null default '{}'::jsonb,   -- { "en": "short message shown once in the app" }
   created_at  timestamptz not null default now()
 );
 
@@ -30,6 +31,7 @@ create table if not exists public.roast_live (
 );
 insert into public.roast_live (id, version) values (1, null) on conflict (id) do nothing;
 
+alter table public.roast_releases add column if not exists announce jsonb not null default '{}'::jsonb;
 alter table public.roast_releases enable row level security;
 alter table public.roast_live     enable row level security;
 revoke all on public.roast_releases, public.roast_live from anon, authenticated;
@@ -79,9 +81,12 @@ $$;
 
 -- Publish -------------------------------------------------------------------
 
+drop function if exists public.board_publish_roasts(text, jsonb, text, text);
+
 -- p_packs: { "en": {pack doc with "roasts": [...]}, "ta-Latn": {...} }, built by the board
 -- from the live lines. Stored as-is and made live straight away.
-create or replace function public.board_publish_roasts(p_code text, p_packs jsonb, p_notes text, p_by text)
+-- p_announce: { "en": "Diwali specials are in.", "ta-Latn": "..." } or {}: shown once in the app.
+create or replace function public.board_publish_roasts(p_code text, p_packs jsonb, p_notes text, p_by text, p_announce jsonb default '{}'::jsonb)
 returns jsonb
 language plpgsql
 security definer
@@ -90,8 +95,10 @@ as $$
 declare
   lang text;
   pack jsonb;
+  msg  text;
   counts jsonb := '{}'::jsonb;
   shas jsonb := '{}'::jsonb;
+  ann  jsonb := '{}'::jsonb;
   v integer;
 begin
   perform public.board_require(p_code, true);
@@ -106,8 +113,18 @@ begin
     counts := counts || jsonb_build_object(lang, jsonb_array_length(pack->'roasts'));
     shas := shas || jsonb_build_object(lang, encode(extensions.digest(pack::text, 'sha256'), 'hex'));
   end loop;
-  insert into public.roast_releases (packs, counts, sha256, notes, created_by)
-  values (p_packs, counts, shas, left(coalesce(p_notes, ''), 500), left(coalesce(p_by, ''), 80))
+  if p_announce is not null and jsonb_typeof(p_announce) = 'object' then
+    for lang, msg in select key, btrim(value #>> '{}') from jsonb_each(p_announce) where jsonb_typeof(value) = 'string' loop
+      if lang ~ '^[a-zA-Z-]{2,12}$' and msg <> '' then
+        if char_length(msg) > 140 or msg ~ '[{}]' then
+          raise exception 'bad_announce' using errcode = '22023';
+        end if;
+        ann := ann || jsonb_build_object(lang, msg);
+      end if;
+    end loop;
+  end if;
+  insert into public.roast_releases (packs, counts, sha256, notes, created_by, announce)
+  values (p_packs, counts, shas, left(coalesce(p_notes, ''), 500), left(coalesce(p_by, ''), 80), ann)
   returning version into v;
   update public.roast_live set version = v, updated_at = now() where id = 1;
   return jsonb_build_object('version', v, 'counts', counts);
@@ -126,7 +143,7 @@ begin
     'live', (select version from public.roast_live where id = 1),
     'releases', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'version', r.version, 'counts', r.counts, 'notes', r.notes,
+        'version', r.version, 'counts', r.counts, 'notes', r.notes, 'announce', r.announce,
         'createdBy', r.created_by, 'createdAt', r.created_at) order by r.version desc)
       from public.roast_releases r), '[]'::jsonb));
 end
@@ -176,6 +193,7 @@ as $$
   else jsonb_build_object(
     'version', r.version,
     'publishedAt', r.created_at,
+    'announce', r.announce,
     'packs', (select jsonb_agg(jsonb_build_object('lang', k, 'count', (r.counts->>k)::int, 'sha256', r.sha256->>k))
               from jsonb_object_keys(r.packs) k))
   end
@@ -196,14 +214,14 @@ as $$
 $$;
 
 revoke all on function public.board_save_roasts(text, jsonb, text[])         from public;
-revoke all on function public.board_publish_roasts(text, jsonb, text, text)  from public;
+revoke all on function public.board_publish_roasts(text, jsonb, text, text, jsonb) from public;
 revoke all on function public.board_releases(text)                           from public;
 revoke all on function public.board_release_packs(text, integer)             from public;
 revoke all on function public.board_set_live(text, integer)                  from public;
 revoke all on function public.roast_manifest()                               from public;
 revoke all on function public.roast_pack(text)                               from public;
 grant execute on function public.board_save_roasts(text, jsonb, text[])        to anon, authenticated;
-grant execute on function public.board_publish_roasts(text, jsonb, text, text) to anon, authenticated;
+grant execute on function public.board_publish_roasts(text, jsonb, text, text, jsonb) to anon, authenticated;
 grant execute on function public.board_releases(text)                          to anon, authenticated;
 grant execute on function public.board_release_packs(text, integer)            to anon, authenticated;
 grant execute on function public.board_set_live(text, integer)                 to anon, authenticated;

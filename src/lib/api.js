@@ -44,7 +44,7 @@ export function makeApi(code) {
     removeFile: (id) => rpc("board_delete_attachment", { p_code: code, p_id: id }),
     // roast admin (supabase/roast-admin.sql)
     saveRoasts: (rows, del = []) => rpc("board_save_roasts", { p_code: code, p_rows: rows, p_delete: del }),
-    publish: (packs, notes, by) => rpc("board_publish_roasts", { p_code: code, p_packs: packs, p_notes: notes, p_by: by || "" }),
+    publish: (packs, notes, by, announce) => rpc("board_publish_roasts", { p_code: code, p_packs: packs, p_notes: notes, p_by: by || "", p_announce: announce || {} }),
     releases: () => rpc("board_releases", { p_code: code }),
     releasePacks: (version) => rpc("board_release_packs", { p_code: code, p_version: version }),
     setLive: (version) => rpc("board_set_live", { p_code: code, p_version: version }),
